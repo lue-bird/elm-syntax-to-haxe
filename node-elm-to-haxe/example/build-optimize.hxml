@@ -1,0 +1,6 @@
+-cp src
+-main Main
+--jvm build/main.jar
+-D analyzer-optimize
+-D warn-var-shadowing
+-dce full
