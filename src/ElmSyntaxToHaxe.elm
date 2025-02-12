@@ -1056,10 +1056,10 @@ type_ moduleOriginLookup (Elm.Syntax.Node.Node _ syntaxType) =
                 )
                 (recordFields
                     |> listMapAndCombineOk
-                        (\(Elm.Syntax.Node.Node _ ( Elm.Syntax.Node.Node _ name, valueNode )) ->
+                        (\(Elm.Syntax.Node.Node _ ( Elm.Syntax.Node.Node _ fieldName, valueNode )) ->
                             Result.map
                                 (\value ->
-                                    ( name |> lowercaseNameSanitizeForHaxe
+                                    ( fieldName |> lowercaseNameSanitizeForHaxe
                                     , value
                                     )
                                 )
@@ -3418,7 +3418,6 @@ valueOrFunctionDeclaration context syntaxDeclarationValueOrFunction =
                     { name =
                         implementation.name
                             |> Elm.Syntax.Node.value
-                            |> lowercaseNameSanitizeForHaxe
                     , type_ = maybeType
                     , parameters = parametersAndDestructuring.parameters
                     , result =
