@@ -228,6 +228,7 @@ runningInterface state =
                                                                             || (subPath |> String.contains "Elm/Parser")
                                                                             || (subPath |> String.contains "ParserFast")
                                                                             || (subPath |> String.contains "ParserWithComments")
+                                                                            || (subPath |> String.contains "Rope")
                                                                             || (subPath |> String.contains "Elm/Interface")
                                                                             || (subPath |> String.contains "Elm/Internal/RawFile")
                                                                        )
