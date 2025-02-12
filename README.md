@@ -1,6 +1,4 @@
-> Status: haxe does not seem to support record access type inference as good as elm.
-Editor tooling knows the type better than the compiler.
-> Also investigating why lazy module-level values are sometimes not used with ().
+> Status: haxe does not support values with generics which still needs to be worked around
 
 Print pure [`elm-syntax`](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/) declarations as
 [haxe](https://haxe.org/) code.
@@ -28,7 +26,7 @@ plus2 n =
 Ok """..some type declarations and imports..
 class Elm {
     ..some default declarations..
-    
+
     static function sample_plus2(n:Float):Float {
         return basics_add(n, list_sum(List_Cons(2.0, List_Empty)));
     }
