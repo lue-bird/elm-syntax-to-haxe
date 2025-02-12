@@ -85,8 +85,7 @@ type HaxeExpression
     | HaxeExpressionRecord (FastDict.Dict String HaxeExpression)
     | HaxeExpressionCall
         { called : HaxeExpression
-        , argument0 : HaxeExpression
-        , argument1Up : List HaxeExpression
+        , arguments : List HaxeExpression
         }
     | HaxeExpressionLambda
         { parameter0 : Maybe String
@@ -3005,6 +3004,57 @@ modules syntaxDeclarationsIncludingOverwrittenOnes =
                     )
                     FastDict.empty
 
+        valuesThatNeedToBeLazilyConstructed : FastSet.Set ( Elm.Syntax.ModuleName.ModuleName, String )
+        valuesThatNeedToBeLazilyConstructed =
+            syntaxModules
+                |> listMapToFastSetsAndUnify
+                    (\syntaxModule ->
+                        let
+                            moduleName : Elm.Syntax.ModuleName.ModuleName
+                            moduleName =
+                                syntaxModule.moduleDefinition
+                                    |> Elm.Syntax.Node.value
+                                    |> moduleHeaderName
+                        in
+                        syntaxModule.declarations
+                            |> List.filterMap
+                                (\(Elm.Syntax.Node.Node _ declaration) ->
+                                    case declaration of
+                                        Elm.Syntax.Declaration.FunctionDeclaration syntaxValueOrFunctionDeclaration ->
+                                            let
+                                                implementation =
+                                                    syntaxValueOrFunctionDeclaration.declaration |> Elm.Syntax.Node.value
+                                            in
+                                            case implementation.arguments of
+                                                _ :: _ ->
+                                                    Nothing
+
+                                                [] ->
+                                                    case syntaxValueOrFunctionDeclaration.signature of
+                                                        Nothing ->
+                                                            Nothing
+
+                                                        Just (Elm.Syntax.Node.Node _ syntaxType) ->
+                                                            if
+                                                                syntaxType.typeAnnotation
+                                                                    |> typeContainedVariables
+                                                                    |> FastSet.isEmpty
+                                                            then
+                                                                Nothing
+
+                                                            else
+                                                                Just
+                                                                    ( moduleName
+                                                                    , implementation.name
+                                                                        |> Elm.Syntax.Node.value
+                                                                    )
+
+                                        _ ->
+                                            Nothing
+                                )
+                            |> FastSet.fromList
+                    )
+
         haxeDeclarationsWithoutExtraRecordTypeAliases :
             { errors : List String
             , declarations :
@@ -3109,7 +3159,15 @@ modules syntaxDeclarationsIncludingOverwrittenOnes =
                                 (\(Elm.Syntax.Node.Node _ declaration) soFar ->
                                     case declaration of
                                         Elm.Syntax.Declaration.FunctionDeclaration syntaxValueOrFunctionDeclaration ->
-                                            case syntaxValueOrFunctionDeclaration |> valueOrFunctionDeclaration createdModuleContext of
+                                            case
+                                                syntaxValueOrFunctionDeclaration
+                                                    |> valueOrFunctionDeclaration
+                                                        { valueAndFunctionAndTypeAliasAndEnumTypeModuleOriginLookup =
+                                                            createdModuleContext.valueAndFunctionAndTypeAliasAndEnumTypeModuleOriginLookup
+                                                        , variantLookup = createdModuleContext.variantLookup
+                                                        , valuesThatNeedToBeLazilyConstructed = valuesThatNeedToBeLazilyConstructed
+                                                        }
+                                            of
                                                 Ok haxeValueOrFunctionDeclaration ->
                                                     { errors = soFar.errors
                                                     , declarations =
@@ -3255,6 +3313,49 @@ modules syntaxDeclarationsIncludingOverwrittenOnes =
     }
 
 
+typeContainedVariables :
+    Elm.Syntax.Node.Node
+        Elm.Syntax.TypeAnnotation.TypeAnnotation
+    -> FastSet.Set String
+typeContainedVariables (Elm.Syntax.Node.Node _ syntaxType) =
+    -- IGNORE TCO
+    case syntaxType of
+        Elm.Syntax.TypeAnnotation.Unit ->
+            FastSet.empty
+
+        Elm.Syntax.TypeAnnotation.GenericType variableName ->
+            variableName |> FastSet.singleton
+
+        Elm.Syntax.TypeAnnotation.Typed _ argumentNodes ->
+            argumentNodes
+                |> listMapToFastSetsAndUnify typeContainedVariables
+
+        Elm.Syntax.TypeAnnotation.Tupled parts ->
+            parts
+                |> listMapToFastSetsAndUnify typeContainedVariables
+
+        Elm.Syntax.TypeAnnotation.Record fields ->
+            fields
+                |> listMapToFastSetsAndUnify
+                    (\(Elm.Syntax.Node.Node _ ( _, value )) ->
+                        value |> typeContainedVariables
+                    )
+
+        Elm.Syntax.TypeAnnotation.GenericRecord (Elm.Syntax.Node.Node _ recordVariableName) (Elm.Syntax.Node.Node _ fields) ->
+            FastSet.insert recordVariableName
+                (fields
+                    |> listMapToFastSetsAndUnify
+                        (\(Elm.Syntax.Node.Node _ ( _, value )) ->
+                            value |> typeContainedVariables
+                        )
+                )
+
+        Elm.Syntax.TypeAnnotation.FunctionTypeAnnotation input output ->
+            FastSet.union
+                (input |> typeContainedVariables)
+                (output |> typeContainedVariables)
+
+
 moduleHeaderName : Elm.Syntax.Module.Module -> Elm.Syntax.ModuleName.ModuleName
 moduleHeaderName moduleHeader =
     case moduleHeader of
@@ -3269,7 +3370,19 @@ moduleHeaderName moduleHeader =
 
 
 valueOrFunctionDeclaration :
-    ModuleContext
+    { valueAndFunctionAndTypeAliasAndEnumTypeModuleOriginLookup :
+        FastDict.Dict
+            ( Elm.Syntax.ModuleName.ModuleName, String )
+            Elm.Syntax.ModuleName.ModuleName
+    , valuesThatNeedToBeLazilyConstructed :
+        FastSet.Set ( Elm.Syntax.ModuleName.ModuleName, String )
+    , variantLookup :
+        FastDict.Dict
+            ( Elm.Syntax.ModuleName.ModuleName, String )
+            { moduleOrigin : Elm.Syntax.ModuleName.ModuleName
+            , valueCount : Int
+            }
+    }
     -> Elm.Syntax.Expression.Function
     ->
         Result
@@ -3328,6 +3441,8 @@ valueOrFunctionDeclaration context syntaxDeclarationValueOrFunction =
                     |> expression
                         { valueAndFunctionAndTypeAliasAndEnumTypeModuleOriginLookup =
                             context.valueAndFunctionAndTypeAliasAndEnumTypeModuleOriginLookup
+                        , valuesThatNeedToBeLazilyConstructed =
+                            context.valuesThatNeedToBeLazilyConstructed
                         , variantLookup = context.variantLookup
                         , variablesFromWithinDeclarationInScope =
                             parameters
@@ -3451,6 +3566,8 @@ expressionContextAddVariablesInScope :
             FastDict.Dict
                 ( Elm.Syntax.ModuleName.ModuleName, String )
                 Elm.Syntax.ModuleName.ModuleName
+        , valuesThatNeedToBeLazilyConstructed :
+            FastSet.Set ( Elm.Syntax.ModuleName.ModuleName, String )
         , variantLookup :
             FastDict.Dict
                 ( Elm.Syntax.ModuleName.ModuleName, String )
@@ -3464,6 +3581,8 @@ expressionContextAddVariablesInScope :
             FastDict.Dict
                 ( Elm.Syntax.ModuleName.ModuleName, String )
                 Elm.Syntax.ModuleName.ModuleName
+        , valuesThatNeedToBeLazilyConstructed :
+            FastSet.Set ( Elm.Syntax.ModuleName.ModuleName, String )
         , variantLookup :
             FastDict.Dict
                 ( Elm.Syntax.ModuleName.ModuleName, String )
@@ -3475,6 +3594,8 @@ expressionContextAddVariablesInScope :
 expressionContextAddVariablesInScope additionalVariablesInScope context =
     { valueAndFunctionAndTypeAliasAndEnumTypeModuleOriginLookup =
         context.valueAndFunctionAndTypeAliasAndEnumTypeModuleOriginLookup
+    , valuesThatNeedToBeLazilyConstructed =
+        context.valuesThatNeedToBeLazilyConstructed
     , variantLookup =
         context.variantLookup
     , variablesFromWithinDeclarationInScope =
@@ -3489,6 +3610,8 @@ expression :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
             Elm.Syntax.ModuleName.ModuleName
+    , valuesThatNeedToBeLazilyConstructed :
+        FastSet.Set ( Elm.Syntax.ModuleName.ModuleName, String )
     , variantLookup :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
@@ -3623,8 +3746,7 @@ expression context (Elm.Syntax.Node.Node _ syntaxExpression) =
                                             { moduleOrigin = Nothing
                                             , name = "string_append"
                                             }
-                                    , argument0 = left
-                                    , argument1Up = [ right ]
+                                    , arguments = [ left, right ]
                                     }
 
                             else
@@ -3634,8 +3756,7 @@ expression context (Elm.Syntax.Node.Node _ syntaxExpression) =
                                             { moduleOrigin = Nothing
                                             , name = "list_append"
                                             }
-                                    , argument0 = left
-                                    , argument1Up = [ right ]
+                                    , arguments = [ left, right ]
                                     }
                         )
                         (leftNode |> expression context)
@@ -3647,8 +3768,7 @@ expression context (Elm.Syntax.Node.Node _ syntaxExpression) =
                             HaxeExpressionCall
                                 { called =
                                     HaxeExpressionReference operationFunctionReference
-                                , argument0 = left
-                                , argument1Up = [ right ]
+                                , arguments = [ left, right ]
                                 }
                         )
                         (expressionOperatorToHaxeFunctionReference otherOperatorSymbol)
@@ -3742,10 +3862,9 @@ expression context (Elm.Syntax.Node.Node _ syntaxExpression) =
                                             , result =
                                                 HaxeExpressionCall
                                                     { called = HaxeExpressionReference reference
-                                                    , argument0 =
+                                                    , arguments =
                                                         generatedValueVariableReference 0
-                                                    , argument1Up =
-                                                        generatedValueVariableReference 1
+                                                            :: generatedValueVariableReference 1
                                                             :: (List.range 2 (valueCountAtLeast2 - 1)
                                                                     |> List.map generatedValueVariableReference
                                                                )
@@ -3772,6 +3891,24 @@ expression context (Elm.Syntax.Node.Node _ syntaxExpression) =
                                                                 { moduleOrigin = moduleOrigin
                                                                 , name = name
                                                                 }
+                                                        }
+
+                                                else if
+                                                    context.valuesThatNeedToBeLazilyConstructed
+                                                        |> FastSet.member
+                                                            ( moduleOrigin, name )
+                                                then
+                                                    HaxeExpressionCall
+                                                        { called =
+                                                            HaxeExpressionReference
+                                                                { moduleOrigin = Nothing
+                                                                , name =
+                                                                    lowercaseReferenceToHaxeName
+                                                                        { moduleOrigin = moduleOrigin
+                                                                        , name = name
+                                                                        }
+                                                                }
+                                                        , arguments = []
                                                         }
 
                                                 else
@@ -3829,8 +3966,7 @@ expression context (Elm.Syntax.Node.Node _ syntaxExpression) =
                         { called =
                             HaxeExpressionReference
                                 { moduleOrigin = Nothing, name = "basics_negate" }
-                        , argument0 = inNegation
-                        , argument1Up = []
+                        , arguments = [ inNegation ]
                         }
                 )
                 (inNegationNode |> expression context)
@@ -4057,6 +4193,8 @@ lambdaExpression :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
             Elm.Syntax.ModuleName.ModuleName
+    , valuesThatNeedToBeLazilyConstructed :
+        FastSet.Set ( Elm.Syntax.ModuleName.ModuleName, String )
     , variantLookup :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
@@ -4154,6 +4292,8 @@ expressionWithLocalDeclarations :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
             Elm.Syntax.ModuleName.ModuleName
+    , valuesThatNeedToBeLazilyConstructed :
+        FastSet.Set ( Elm.Syntax.ModuleName.ModuleName, String )
     , variantLookup :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
@@ -4446,7 +4586,7 @@ haxePatternTrue : HaxePattern
 haxePatternTrue =
     HaxePatternVariant
         { moduleOrigin = Nothing
-        , name = "True"
+        , name = "true"
         , values = []
         }
 
@@ -4455,7 +4595,7 @@ haxePatternFalse : HaxePattern
 haxePatternFalse =
     HaxePatternVariant
         { moduleOrigin = Nothing
-        , name = "False"
+        , name = "false"
         , values = []
         }
 
@@ -4495,12 +4635,9 @@ haxeExpressionContainedLocalReferences haxeExpression =
         HaxeExpressionCall call ->
             FastSet.union
                 (call.called |> haxeExpressionContainedLocalReferences)
-                (FastSet.union
-                    (call.argument0 |> haxeExpressionContainedLocalReferences)
-                    (call.argument1Up
-                        |> listMapToFastSetsAndUnify
-                            haxeExpressionContainedLocalReferences
-                    )
+                (call.arguments
+                    |> listMapToFastSetsAndUnify
+                        haxeExpressionContainedLocalReferences
                 )
 
         HaxeExpressionLambda lambda ->
@@ -4676,13 +4813,18 @@ condenseExpressionCall :
 condenseExpressionCall call =
     case call.called of
         HaxeExpressionCall calledCall ->
-            condenseExpressionCall
-                { called = calledCall.called
-                , argument0 = calledCall.argument0
-                , argument1Up =
-                    calledCall.argument1Up
-                        ++ (call.argument0 :: call.argument1Up)
-                }
+            case calledCall.arguments of
+                [] ->
+                    HaxeExpressionCall calledCall
+
+                calledCallArgument0 :: calledCallArgument1Up ->
+                    condenseExpressionCall
+                        { called = calledCall.called
+                        , argument0 = calledCallArgument0
+                        , argument1Up =
+                            calledCallArgument1Up
+                                ++ (call.argument0 :: call.argument1Up)
+                        }
 
         HaxeExpressionLambda calledLambda ->
             case ( calledLambda.parameter0, calledLambda.result ) of
@@ -4701,29 +4843,25 @@ condenseExpressionCall call =
                                         { record = call.argument0
                                         , field = recordAccess.field
                                         }
-                                , argument0 = argument1
-                                , argument1Up = argument2Up
+                                , arguments = argument1 :: argument2Up
                                 }
 
                 ( Just "generated_0", HaxeExpressionCall variantCall ) ->
                     HaxeExpressionCall
                         { called = variantCall.called
-                        , argument0 = call.argument0
-                        , argument1Up = call.argument1Up
+                        , arguments = call.argument0 :: call.argument1Up
                         }
 
                 _ ->
                     HaxeExpressionCall
                         { called = HaxeExpressionLambda calledLambda
-                        , argument0 = call.argument0
-                        , argument1Up = call.argument1Up
+                        , arguments = call.argument0 :: call.argument1Up
                         }
 
         calledNotCall ->
             HaxeExpressionCall
                 { called = calledNotCall
-                , argument0 = call.argument0
-                , argument1Up = call.argument1Up
+                , arguments = call.argument0 :: call.argument1Up
                 }
 
 
@@ -4736,7 +4874,7 @@ haxeExpressionIsDefinitelyOfTypeString haxeExpression =
         HaxeExpressionCall call ->
             call.called
                 == HaxeExpressionReference { moduleOrigin = Nothing, name = "string_append" }
-                && ((call.argument1Up |> List.length) == 1)
+                && ((call.arguments |> List.length) == 2)
 
         HaxeExpressionFloat _ ->
             False
@@ -4768,6 +4906,8 @@ case_ :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
             Elm.Syntax.ModuleName.ModuleName
+    , valuesThatNeedToBeLazilyConstructed :
+        FastSet.Set ( Elm.Syntax.ModuleName.ModuleName, String )
     , variantLookup :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
@@ -4812,6 +4952,8 @@ letDeclaration :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
             Elm.Syntax.ModuleName.ModuleName
+    , valuesThatNeedToBeLazilyConstructed :
+        FastSet.Set ( Elm.Syntax.ModuleName.ModuleName, String )
     , variantLookup :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
@@ -4857,6 +4999,8 @@ letValueOrFunctionDeclaration :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
             Elm.Syntax.ModuleName.ModuleName
+    , valuesThatNeedToBeLazilyConstructed :
+        FastSet.Set ( Elm.Syntax.ModuleName.ModuleName, String )
     , variantLookup :
         FastDict.Dict
             ( Elm.Syntax.ModuleName.ModuleName, String )
@@ -4923,8 +5067,9 @@ letValueOrFunctionDeclaration context syntaxDeclarationValueOrFunction =
                     |> expression
                         { valueAndFunctionAndTypeAliasAndEnumTypeModuleOriginLookup =
                             context.valueAndFunctionAndTypeAliasAndEnumTypeModuleOriginLookup
-                        , variantLookup =
-                            context.variantLookup
+                        , valuesThatNeedToBeLazilyConstructed =
+                            context.valuesThatNeedToBeLazilyConstructed
+                        , variantLookup = context.variantLookup
                         , variablesFromWithinDeclarationInScope =
                             FastSet.union
                                 (parameters
@@ -5143,8 +5288,7 @@ printHaxeExpressionNotParenthesized haxeExpression =
 
 printHaxeExpressionCall :
     { called : HaxeExpression
-    , argument0 : HaxeExpression
-    , argument1Up : List HaxeExpression
+    , arguments : List HaxeExpression
     }
     -> Print
 printHaxeExpressionCall call =
@@ -5156,7 +5300,7 @@ printHaxeExpressionCall call =
 
         argumentPrints : List Print
         argumentPrints =
-            (call.argument0 :: call.argument1Up)
+            call.arguments
                 |> List.map printHaxeExpressionParenthesizedIfWithLocalDeclarations
 
         fullLineSpread : Print.LineSpread
@@ -5323,7 +5467,6 @@ printHaxeExpressionLambda syntaxLambda =
                         )
                 )
             )
-        |> Print.followedBy Print.linebreakIndented
 
 
 printHaxeParameterForExpression : Maybe String -> Print
@@ -5599,7 +5742,8 @@ printHaxeValueDeclaration haxeValueOrFunctionDeclaration =
                         let
                             typePrint : Print
                             typePrint =
-                                printHaxeTypeNotParenthesized declaredType
+                                printHaxeTypeNotParenthesized
+                                    declaredType
 
                             typeLineSpread : Print.LineSpread
                             typeLineSpread =
@@ -5626,6 +5770,21 @@ printHaxeValueDeclaration haxeValueOrFunctionDeclaration =
             )
 
 
+maybeHaxeTypeContainsVariables : Maybe HaxeType -> Bool
+maybeHaxeTypeContainsVariables maybeHaxeType =
+    case maybeHaxeType of
+        Nothing ->
+            False
+
+        Just declaredType ->
+            Basics.not
+                (FastSet.isEmpty
+                    (declaredType
+                        |> haxeTypeContainedVariables
+                    )
+                )
+
+
 printHaxeValueOrFunctionDeclaration :
     { parameters : List (Maybe String)
     , name : String
@@ -5636,25 +5795,32 @@ printHaxeValueOrFunctionDeclaration :
 printHaxeValueOrFunctionDeclaration haxeValueOrFunctionDeclaration =
     case haxeValueOrFunctionDeclaration.parameters of
         [] ->
-            printHaxeValueDeclaration
-                { name = haxeValueOrFunctionDeclaration.name
-                , type_ = haxeValueOrFunctionDeclaration.type_
-                , result = haxeValueOrFunctionDeclaration.result
-                }
+            if haxeValueOrFunctionDeclaration.type_ |> maybeHaxeTypeContainsVariables then
+                printHaxeFunctionDeclaration
+                    { name = haxeValueOrFunctionDeclaration.name
+                    , parameters = []
+                    , type_ = haxeValueOrFunctionDeclaration.type_
+                    , result = haxeValueOrFunctionDeclaration.result
+                    }
+
+            else
+                printHaxeValueDeclaration
+                    { name = haxeValueOrFunctionDeclaration.name
+                    , type_ = haxeValueOrFunctionDeclaration.type_
+                    , result = haxeValueOrFunctionDeclaration.result
+                    }
 
         parameter0 :: parameter1Up ->
             printHaxeFunctionDeclaration
                 { name = haxeValueOrFunctionDeclaration.name
-                , parameter0 = parameter0
-                , parameter1Up = parameter1Up
+                , parameters = parameter0 :: parameter1Up
                 , type_ = haxeValueOrFunctionDeclaration.type_
                 , result = haxeValueOrFunctionDeclaration.result
                 }
 
 
 printHaxeFunctionDeclaration :
-    { parameter0 : Maybe String
-    , parameter1Up : List (Maybe String)
+    { parameters : List (Maybe String)
     , name : String
     , type_ : Maybe HaxeType
     , result : HaxeExpression
@@ -5667,133 +5833,131 @@ printHaxeFunctionDeclaration haxeFunctionDeclaration =
             printHaxeExpressionParenthesizedIfWithLocalDeclarations
                 haxeFunctionDeclaration.result
     in
-    Print.exactly
-        ("function "
-            ++ haxeFunctionDeclaration.name
-        )
-        |> Print.followedBy
-            ((case haxeFunctionDeclaration.type_ of
-                Nothing ->
-                    Print.exactly "("
-                        |> Print.followedBy
-                            ((haxeFunctionDeclaration.parameter0
-                                :: haxeFunctionDeclaration.parameter1Up
-                             )
-                                |> Print.listMapAndIntersperseAndFlatten
-                                    printHaxeParameterForExpression
-                                    (Print.exactly ", ")
-                            )
-                        |> Print.followedBy
-                            (Print.exactly ")")
-
-                Just declaredType ->
-                    let
-                        typedParametersAndResultType :
-                            { parameters : List { name : Maybe String, type_ : HaxeType }
-                            , result : HaxeType
-                            }
-                        typedParametersAndResultType =
-                            case declaredType of
-                                HaxeTypeFunction haxeTypeFunction ->
-                                    { parameters =
-                                        List.map2
-                                            (\parameterType parameterName ->
-                                                { name = parameterName, type_ = parameterType }
-                                            )
-                                            haxeTypeFunction.input
-                                            (haxeFunctionDeclaration.parameter0
-                                                :: haxeFunctionDeclaration.parameter1Up
-                                            )
-                                    , result = haxeTypeFunction.output
-                                    }
-
-                                declaredTypeNotFunction ->
-                                    -- TODO fail or something
-                                    { parameters = []
-                                    , result = declaredTypeNotFunction
-                                    }
-
-                        resultTypePrint : Print
-                        resultTypePrint =
-                            printHaxeTypeNotParenthesized
-                                typedParametersAndResultType.result
-
-                        typeLineSpread : Print.LineSpread
-                        typeLineSpread =
-                            resultTypePrint |> Print.lineSpread
-
-                        generics : List String
-                        generics =
-                            declaredType
-                                |> haxeTypeContainedVariables
-                                |> FastSet.toList
-                    in
-                    Print.exactly
-                        ((case generics of
-                            [] ->
-                                ""
-
-                            generic0 :: generic1Up ->
-                                "<"
-                                    ++ ((generic0 :: generic1Up)
-                                            |> String.join ", "
-                                       )
-                                    ++ ">"
-                         )
-                            ++ "("
-                        )
-                        |> Print.followedBy
-                            (typedParametersAndResultType.parameters
-                                |> Print.listMapAndIntersperseAndFlatten
-                                    (\typedParameter ->
-                                        typedParameter.name
-                                            |> printHaxeParameterForExpression
-                                            |> Print.followedBy
-                                                (Print.exactly ":")
-                                            |> Print.followedBy
-                                                (typedParameter.type_
-                                                    |> printHaxeTypeNotParenthesized
-                                                )
-                                    )
-                                    (Print.exactly ", ")
-                            )
-                        |> Print.followedBy
-                            (Print.exactly ")")
-                        |> Print.followedBy
-                            (Print.withIndentAtNextMultipleOf4
-                                (Print.exactly ":"
-                                    |> Print.followedBy
-                                        (Print.emptyOrLinebreakIndented typeLineSpread
-                                            |> Print.followedBy
-                                                (Print.withIndentAtNextMultipleOf4
-                                                    resultTypePrint
-                                                )
-                                        )
-                                )
-                            )
-             )
+    (case haxeFunctionDeclaration.type_ of
+        Nothing ->
+            Print.exactly
+                ("function "
+                    ++ haxeFunctionDeclaration.name
+                    ++ "("
+                )
                 |> Print.followedBy
-                    (Print.exactly " {")
+                    (haxeFunctionDeclaration.parameters
+                        |> Print.listMapAndIntersperseAndFlatten
+                            printHaxeParameterForExpression
+                            (Print.exactly ", ")
+                    )
+                |> Print.followedBy
+                    (Print.exactly ")")
+
+        Just declaredType ->
+            let
+                typedParametersAndResultType :
+                    { parameters : List { name : Maybe String, type_ : HaxeType }
+                    , result : HaxeType
+                    }
+                typedParametersAndResultType =
+                    case declaredType of
+                        HaxeTypeFunction haxeTypeFunction ->
+                            { parameters =
+                                List.map2
+                                    (\parameterType parameterName ->
+                                        { name = parameterName, type_ = parameterType }
+                                    )
+                                    haxeTypeFunction.input
+                                    haxeFunctionDeclaration.parameters
+                            , result = haxeTypeFunction.output
+                            }
+
+                        declaredTypeNotFunction ->
+                            -- TODO fail or something
+                            { parameters = []
+                            , result = declaredTypeNotFunction
+                            }
+
+                resultTypePrint : Print
+                resultTypePrint =
+                    printHaxeTypeNotParenthesized
+                        typedParametersAndResultType.result
+
+                typeLineSpread : Print.LineSpread
+                typeLineSpread =
+                    resultTypePrint |> Print.lineSpread
+
+                generics : List String
+                generics =
+                    declaredType
+                        |> haxeTypeContainedVariables
+                        |> FastSet.toList
+            in
+            Print.exactly
+                ((case generics of
+                    [] ->
+                        "function "
+                            ++ haxeFunctionDeclaration.name
+
+                    generic0 :: generic1Up ->
+                        -- @:generic
+                        "function "
+                            ++ haxeFunctionDeclaration.name
+                            ++ "<"
+                            ++ ((generic0 :: generic1Up)
+                                    |> String.join ", "
+                               )
+                            ++ ">"
+                 )
+                    ++ "("
+                )
+                |> Print.followedBy
+                    (typedParametersAndResultType.parameters
+                        |> Print.listMapAndIntersperseAndFlatten
+                            (\typedParameter ->
+                                typedParameter.name
+                                    |> printHaxeParameterForExpression
+                                    |> Print.followedBy
+                                        (Print.exactly ":")
+                                    |> Print.followedBy
+                                        (typedParameter.type_
+                                            |> printHaxeTypeNotParenthesized
+                                        )
+                            )
+                            (Print.exactly ", ")
+                    )
+                |> Print.followedBy
+                    (Print.exactly ")")
                 |> Print.followedBy
                     (Print.withIndentAtNextMultipleOf4
-                        (Print.linebreakIndented
+                        (Print.exactly ":"
                             |> Print.followedBy
-                                (Print.exactly "return")
-                            |> Print.followedBy
-                                (Print.withIndentAtNextMultipleOf4
-                                    (Print.spaceOrLinebreakIndented
-                                        (resultPrint |> Print.lineSpread)
-                                        |> Print.followedBy
-                                            resultPrint
-                                        |> Print.followedBy
-                                            (Print.exactly ";")
-                                    )
+                                (Print.emptyOrLinebreakIndented typeLineSpread
+                                    |> Print.followedBy
+                                        (Print.withIndentAtNextMultipleOf4
+                                            resultTypePrint
+                                        )
                                 )
                         )
                     )
-                |> Print.followedBy Print.linebreakIndented
-                |> Print.followedBy (Print.exactly "}")
+    )
+        |> Print.followedBy
+            (Print.exactly " {")
+        |> Print.followedBy
+            (Print.withIndentAtNextMultipleOf4
+                (Print.linebreakIndented
+                    |> Print.followedBy
+                        (Print.exactly "return")
+                    |> Print.followedBy
+                        (Print.withIndentAtNextMultipleOf4
+                            (Print.spaceOrLinebreakIndented
+                                (resultPrint |> Print.lineSpread)
+                                |> Print.followedBy
+                                    resultPrint
+                                |> Print.followedBy
+                                    (Print.exactly ";")
+                            )
+                        )
+                )
             )
+        |> Print.followedBy Print.linebreakIndented
+        |> Print.followedBy (Print.exactly "}")
 
 
 haxeDefaultDeclarations : String
@@ -6096,8 +6260,8 @@ haxeDefaultDeclarations =
 \t\t}
 \t}
 
-\tstatic function char_toCode(char:String):String {
-\t\treturn char.charAt(0);
+\tstatic function char_toCode(char:String):Float {
+\t\treturn char.charCodeAt(0) ?? 0;
 \t}
 
 \tstatic function string_all(isExpected:String->Bool, str:String):Bool {

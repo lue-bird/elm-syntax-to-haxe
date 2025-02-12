@@ -1,5 +1,3 @@
-> Status: still need to work around haxe not supporting values declarations with generics
-
 Print pure [`elm-syntax`](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/) declarations as
 [haxe](https://haxe.org/) code.
 
