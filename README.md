@@ -45,7 +45,9 @@ run [this node script](https://github.com/lue-bird/elm-syntax-to-haxe/tree/main/
     -   `elm/regex`, `elm/file`, `elm/bytes`, `elm/http`, `elm/random`, `elm/url`, `elm/json`, `elm/parser`, `elm/virtual-dom`,
         `elm/html`, `elm/svg`, `elm/browser`, `elm/time`, `elm-explorations/markdown`, `elm-explorations/webgl`, `elm-explorations/benchmark`, `elm-explorations/linear-algebra`
     -   `Platform`, `Platform.Cmd`, `Platform.Sub`, `Task`, `Process`
-    -   **record update**, currying, ports, glsl, the prefix operator functions `(>>)` and `(<<)`
+    -   **record update**, currying, ports, glsl, `(>>)` and `(<<)`, extensible records of any kind inferred or annotated
+    - accessing record fields before their type is concretely known can sometimes not be inferred by haxe.
+      When I finish implementing type inference, this will be fixed.
     -   `++` will default to `List.append` unless one of the arguments is a string literal. So e.g. use `a ++ b ++ ""` to append string variables (which is also faster in elm)
     - `List.minimum`, `List.maximum`, `Basics.min`, `Basics.max` will only work with numbers.
     -   potential future candidates: `Basics.clamp`, `Basics.degrees`, `Basics.turns`,
