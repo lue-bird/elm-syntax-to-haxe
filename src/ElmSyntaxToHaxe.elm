@@ -5533,10 +5533,23 @@ printHaxeExpressionWithLocalDeclaration :
     }
     -> Print
 printHaxeExpressionWithLocalDeclaration haxeExpressionWithLocalDeclaration =
-    -- TODO if has generics, assume they originate from a module-level annotation
-    -- and use a plain value instead of a function()
-    (haxeExpressionWithLocalDeclaration.declaration
-        |> printHaxeValueOrFunctionDeclaration
+    (case haxeExpressionWithLocalDeclaration.declaration.parameters of
+        [] ->
+            -- if the value has generics, assume they originate from a module-level annotation
+            -- and use a plain value instead of a function()
+            printHaxeValueDeclaration
+                { name = haxeExpressionWithLocalDeclaration.declaration.name
+                , type_ = haxeExpressionWithLocalDeclaration.declaration.type_
+                , result = haxeExpressionWithLocalDeclaration.declaration.result
+                }
+
+        parameter0 :: parameter1Up ->
+            printHaxeFunctionDeclaration
+                { name = haxeExpressionWithLocalDeclaration.declaration.name
+                , parameters = parameter0 :: parameter1Up
+                , type_ = haxeExpressionWithLocalDeclaration.declaration.type_
+                , result = haxeExpressionWithLocalDeclaration.declaration.result
+                }
     )
         |> Print.followedBy Print.linebreak
         |> Print.followedBy Print.linebreakIndented
@@ -5710,8 +5723,30 @@ class Elm {
                         (\haxeValueOrFunctionDeclaration ->
                             Print.exactly "static public "
                                 |> Print.followedBy
-                                    (printHaxeValueOrFunctionDeclaration
-                                        haxeValueOrFunctionDeclaration
+                                    (case haxeValueOrFunctionDeclaration.parameters of
+                                        [] ->
+                                            if haxeValueOrFunctionDeclaration.type_ |> maybeHaxeTypeContainsVariables then
+                                                printHaxeFunctionDeclaration
+                                                    { name = haxeValueOrFunctionDeclaration.name
+                                                    , parameters = []
+                                                    , type_ = haxeValueOrFunctionDeclaration.type_
+                                                    , result = haxeValueOrFunctionDeclaration.result
+                                                    }
+
+                                            else
+                                                printHaxeValueDeclaration
+                                                    { name = haxeValueOrFunctionDeclaration.name
+                                                    , type_ = haxeValueOrFunctionDeclaration.type_
+                                                    , result = haxeValueOrFunctionDeclaration.result
+                                                    }
+
+                                        parameter0 :: parameter1Up ->
+                                            printHaxeFunctionDeclaration
+                                                { name = haxeValueOrFunctionDeclaration.name
+                                                , parameters = parameter0 :: parameter1Up
+                                                , type_ = haxeValueOrFunctionDeclaration.type_
+                                                , result = haxeValueOrFunctionDeclaration.result
+                                                }
                                     )
                         )
                         (Print.linebreak
@@ -5784,40 +5819,6 @@ maybeHaxeTypeContainsVariables maybeHaxeType =
                         |> haxeTypeContainedVariables
                     )
                 )
-
-
-printHaxeValueOrFunctionDeclaration :
-    { parameters : List (Maybe String)
-    , name : String
-    , type_ : Maybe HaxeType
-    , result : HaxeExpression
-    }
-    -> Print
-printHaxeValueOrFunctionDeclaration haxeValueOrFunctionDeclaration =
-    case haxeValueOrFunctionDeclaration.parameters of
-        [] ->
-            if haxeValueOrFunctionDeclaration.type_ |> maybeHaxeTypeContainsVariables then
-                printHaxeFunctionDeclaration
-                    { name = haxeValueOrFunctionDeclaration.name
-                    , parameters = []
-                    , type_ = haxeValueOrFunctionDeclaration.type_
-                    , result = haxeValueOrFunctionDeclaration.result
-                    }
-
-            else
-                printHaxeValueDeclaration
-                    { name = haxeValueOrFunctionDeclaration.name
-                    , type_ = haxeValueOrFunctionDeclaration.type_
-                    , result = haxeValueOrFunctionDeclaration.result
-                    }
-
-        parameter0 :: parameter1Up ->
-            printHaxeFunctionDeclaration
-                { name = haxeValueOrFunctionDeclaration.name
-                , parameters = parameter0 :: parameter1Up
-                , type_ = haxeValueOrFunctionDeclaration.type_
-                , result = haxeValueOrFunctionDeclaration.result
-                }
 
 
 printHaxeFunctionDeclaration :
