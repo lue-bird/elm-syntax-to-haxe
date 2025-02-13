@@ -2218,7 +2218,7 @@ referenceToCoreHaxe reference =
                     Just { moduleOrigin = Nothing, name = "list_unzip" }
 
                 "concatMap" ->
-                    Just { moduleOrigin = Just "list", name = "list_concatMap" }
+                    Just { moduleOrigin = Nothing, name = "list_concatMap" }
 
                 "sort" ->
                     Just { moduleOrigin = Nothing, name = "list_sort" }
@@ -4419,8 +4419,51 @@ destructuringDeclarationsSortMostToLeastDependedUpon :
             , expression : HaxeExpression
             }
 destructuringDeclarationsSortMostToLeastDependedUpon destructuringDeclarations =
-    -- TODO
     destructuringDeclarations
+        |> List.sortWith destructuringDeclarationDependenceOrder
+
+
+destructuringDeclarationDependenceOrder :
+    { pattern : HaxePattern
+    , expression : HaxeExpression
+    }
+    ->
+        { pattern : HaxePattern
+        , expression : HaxeExpression
+        }
+    -> Order
+destructuringDeclarationDependenceOrder a b =
+    let
+        aIntroducedVariables : FastSet.Set String
+        aIntroducedVariables =
+            a.pattern
+                |> haxePatternIntroducedVariables
+                |> FastSet.fromList
+
+        bUsedLocalReferences : FastSet.Set String
+        bUsedLocalReferences =
+            b.expression |> haxeExpressionContainedLocalReferences
+    in
+    if fastSetsIntersect aIntroducedVariables bUsedLocalReferences then
+        LT
+
+    else
+        let
+            bIntroducedVariables : FastSet.Set String
+            bIntroducedVariables =
+                b.pattern
+                    |> haxePatternIntroducedVariables
+                    |> FastSet.fromList
+
+            aUsedLocalReferences : FastSet.Set String
+            aUsedLocalReferences =
+                a.expression |> haxeExpressionContainedLocalReferences
+        in
+        if fastSetsIntersect bIntroducedVariables aUsedLocalReferences then
+            GT
+
+        else
+            EQ
 
 
 includeDestructuringsIntoHaxeValueAndFunctionDeclarations :
