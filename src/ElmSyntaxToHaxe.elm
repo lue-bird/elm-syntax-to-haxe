@@ -81,7 +81,6 @@ type HaxeExpression
         { record : HaxeExpression
         , field : String
         }
-    | HaxeExpressionList (List HaxeExpression)
     | HaxeExpressionRecord (FastDict.Dict String HaxeExpression)
     | HaxeExpressionCall
         { called : HaxeExpression
@@ -3984,7 +3983,20 @@ expression context (Elm.Syntax.Node.Node _ syntaxExpression) =
                     Err "too many tuple parts"
 
         Elm.Syntax.Expression.ListExpr elementNodes ->
-            Result.map (\elements -> HaxeExpressionList elements)
+            Result.map
+                (\elements ->
+                    elements
+                        |> List.foldr
+                            (\head tail ->
+                                HaxeExpressionCall
+                                    { called =
+                                        HaxeExpressionReference
+                                            { moduleOrigin = Nothing, name = "List_Cons" }
+                                    , arguments = [ head, tail ]
+                                    }
+                            )
+                            haxeExpressionListEmpty
+                )
                 (elementNodes
                     |> listMapAndCombineOk
                         (\element -> element |> expression context)
@@ -4056,6 +4068,12 @@ expression context (Elm.Syntax.Node.Node _ syntaxExpression) =
                         , declaration1UpNode = declaration1UpNode
                         , expression = letIn.expression
                         }
+
+
+haxeExpressionListEmpty : HaxeExpression
+haxeExpressionListEmpty =
+    HaxeExpressionReference
+        { moduleOrigin = Nothing, name = "List_Empty" }
 
 
 parametersToHaxeAndDestructuring :
@@ -4609,11 +4627,6 @@ haxeExpressionContainedLocalReferences haxeExpression =
         HaxeExpressionRecordAccess haxeRecordAccess ->
             haxeExpressionContainedLocalReferences haxeRecordAccess.record
 
-        HaxeExpressionList elements ->
-            elements
-                |> listMapToFastSetsAndUnify
-                    haxeExpressionContainedLocalReferences
-
         HaxeExpressionRecord fields ->
             fields
                 |> FastDict.values
@@ -4865,9 +4878,6 @@ haxeExpressionIsDefinitelyOfTypeString haxeExpression =
             False
 
         HaxeExpressionRecordAccess _ ->
-            False
-
-        HaxeExpressionList _ ->
             False
 
         HaxeExpressionRecord _ ->
@@ -5206,9 +5216,6 @@ haxeExpressionIsSpaceSeparated haxeExpression =
         HaxeExpressionRecordAccess _ ->
             False
 
-        HaxeExpressionList _ ->
-            False
-
         HaxeExpressionRecord _ ->
             False
 
@@ -5255,9 +5262,6 @@ printHaxeExpressionNotParenthesized haxeExpression =
 
         HaxeExpressionRecord fields ->
             printHaxeExpressionRecord fields
-
-        HaxeExpressionList elements ->
-            printHaxeExpressionList elements
 
         HaxeExpressionRecordAccess syntaxRecordAccess ->
             printHaxeExpressionParenthesizedIfSpaceSeparated
@@ -5323,38 +5327,6 @@ haxeNumberLiteralToString float =
 
     else
         floatAsString ++ ".0"
-
-
-printHaxeExpressionList : List HaxeExpression -> Print
-printHaxeExpressionList listElements =
-    case listElements of
-        [] ->
-            Print.exactly "[]"
-
-        element0 :: element1Up ->
-            let
-                elementsPrint : Print
-                elementsPrint =
-                    (element0 :: element1Up)
-                        |> Print.listMapAndIntersperseAndFlatten
-                            (\element ->
-                                printHaxeExpressionNotParenthesized element
-                            )
-                            (Print.exactly ","
-                                |> Print.followedBy Print.linebreakIndented
-                            )
-            in
-            Print.exactly "[ "
-                |> Print.followedBy
-                    (Print.withIndentIncreasedBy 2
-                        elementsPrint
-                    )
-                |> Print.followedBy
-                    (Print.spaceOrLinebreakIndented
-                        (elementsPrint |> Print.lineSpread)
-                    )
-                |> Print.followedBy
-                    (Print.exactly "]")
 
 
 patternIsSpaceSeparated : HaxePattern -> Bool
