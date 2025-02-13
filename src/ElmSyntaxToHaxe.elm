@@ -2139,13 +2139,16 @@ referenceToCoreHaxe reference =
                     Just { moduleOrigin = Nothing, name = "char_toCode" }
 
                 "fromCode" ->
-                    Just { moduleOrigin = Just "String", name = "fromCharCode" }
+                    Just { moduleOrigin = Nothing, name = "char_fromCode" }
 
                 "toLower" ->
                     Just { moduleOrigin = Nothing, name = "string_toLower" }
 
                 "toUpper" ->
                     Just { moduleOrigin = Nothing, name = "string_toUpper" }
+
+                "isHex" ->
+                    Just { moduleOrigin = Nothing, name = "char_isHex" }
 
                 _ ->
                     Nothing
@@ -6193,7 +6196,7 @@ haxeDefaultDeclarations =
 \t}
 
 \tstatic final linebreakRegex = // doesn't cover old mac and other uncommon platforms
-\t\t~/(\\t?\\n)/;
+\t\t~/(\\r?\\n)/;
 
 \tinline static function string_lines(str:String):List_List<String> {
 \t\treturn arrayToList_List(linebreakRegex.split(str));
@@ -6211,6 +6214,28 @@ haxeDefaultDeclarations =
 
 \tinline static function string_split(separator:String, str:String):List_List<String> {
 \t\treturn arrayToList_List(str.split(separator));
+\t}
+
+\tstatic function string_all(isExpected:String->Bool, str:String):Bool {
+\t\treturn if (str == "") true else Lambda.forall(str.split(""), isExpected);
+\t}
+
+\tstatic function string_any(isOdd:String->Bool, str:String):Bool {
+\t\treturn if (str == "") false else Lambda.exists(str.split(""), isOdd);
+\t}
+
+\tstatic function string_filter(shouldKeep:String->Bool, str:String):String {
+\t\treturn if (str == "") "" else str.split("").filter(shouldKeep).join("");
+\t}
+
+\tstatic function string_foldl<Folded>(reduce:(String, Folded) -> Folded, initialFolded:Folded, str:String):Folded {
+\t\treturn Lambda.fold(str.split(""), reduce, initialFolded);
+\t}
+
+\tstatic function string_foldr<Folded>(reduce:(String, Folded) -> Folded, initialFolded:Folded, str:String):Folded {
+\t\tfinal charsReverse = str.split("");
+\t\tcharsReverse.reverse(); // mutate
+\t\treturn Lambda.fold(charsReverse, reduce, initialFolded);
 \t}
 
 \tprivate static function arrayToList_List<A>(array:Array<A>):List_List<A> {
@@ -6239,24 +6264,23 @@ haxeDefaultDeclarations =
 \t\t}
 \t}
 
+\tstatic function char_fromCode(charCode:Float):String {
+\t\treturn String.fromCharCode(Std.int(charCode));
+\t}
+
 \tstatic function char_toCode(char:String):Float {
 \t\treturn char.charCodeAt(0) ?? 0;
 \t}
 
-\tstatic function string_all(isExpected:String->Bool, str:String):Bool {
-\t\treturn if (str == "") true else iterableAll(isExpected, str.split(""));
+\tstatic function char_fromCode(charCode:Float):String {
+\t\treturn String.fromCharCode(Std.int(charCode));
 \t}
 
-\tstatic function string_any(isOdd:String->Bool, str:String):Bool {
-\t\treturn if (str == "") true else Lambda.exists(str.split(""), isOdd);
-\t}
-
-\tinline private static function iterableAll<A>(isExpected:A->Bool, array:Iterable<A>):Bool {
-\t\treturn !Lambda.exists(array, element -> !isExpected(element));
-\t}
-
-\tstatic function string_filter(shouldKeep:String->Bool, str:String):String {
-\t\treturn if (str == "") "" else str.split("").filter(shouldKeep).join("");
+\tstatic function char_isHex(char:String):Bool {
+\t\treturn switch char {
+\t\t\tcase "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "a" | "A" | "b" | "B" | "c" | "C" | "d" | "D" | "e" | "E" | "f" | "F": true;
+\t\t\tcase _: false;
+\t\t};
 \t}
 
 \tstatic function list_singleton<A>(onlyElement:A) {
