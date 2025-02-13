@@ -2337,6 +2337,7 @@ uppercaseReferenceToHaxeName reference =
     (reference.moduleOrigin
         |> String.concat
     )
+        ++ "_"
         ++ (reference.name |> stringFirstCharToUpper)
         |> uppercaseNameSanitizeForHaxe
 
