@@ -5750,10 +5750,8 @@ printHaxeValueDeclaration haxeValueOrFunctionDeclaration =
                         in
                         Print.exactly ":"
                             |> Print.followedBy
-                                (Print.withIndentAtNextMultipleOf4
-                                    (Print.emptyOrLinebreakIndented typeLineSpread
-                                        |> Print.followedBy typePrint
-                                    )
+                                (Print.emptyOrLinebreakIndented typeLineSpread
+                                    |> Print.followedBy typePrint
                                 )
                  )
                     |> Print.followedBy
