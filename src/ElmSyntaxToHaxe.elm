@@ -1,6 +1,6 @@
 module ElmSyntaxToHaxe exposing
     ( modules, haxeDeclarationsToModuleString
-    , HaxeLetDeclaration(..), HaxeExpression(..), HaxePattern(..), HaxeType(..)
+    , HaxeExpression(..), HaxePattern(..), HaxeType(..)
     )
 
 {-| Transpiling [`elm-syntax`](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/)
@@ -115,14 +115,12 @@ type HaxeExpression
         }
 
 
-{-| The sub-set of haxe local declaration syntax used in generated haxe code
--}
-type HaxeLetDeclaration
-    = HaxeLetDestructuring
+type HaxeValueOrFunctionDeclarationOrDestructuring
+    = HaxeDestructuring
         { pattern : HaxePattern
         , expression : HaxeExpression
         }
-    | HaxeLetDeclarationValueOrFunction
+    | HaxeLocalDeclarationValueOrFunction
         { name : String
         , parameters : List (Maybe String)
         , result : HaxeExpression
@@ -3825,51 +3823,7 @@ expression context (Elm.Syntax.Node.Node _ syntaxExpression) =
                                                     }
                                             }
                             in
-                            Ok
-                                (case variantInfo.valueCount of
-                                    0 ->
-                                        HaxeExpressionReference reference
-
-                                    1 ->
-                                        HaxeExpressionReference reference
-
-                                    valueCountAtLeast2 ->
-                                        let
-                                            generatedValueVariableReference : Int -> HaxeExpression
-                                            generatedValueVariableReference valueIndex =
-                                                HaxeExpressionReference
-                                                    { moduleOrigin = Nothing
-                                                    , name =
-                                                        "generated_"
-                                                            ++ (valueIndex |> String.fromInt)
-                                                    }
-
-                                            generatedValuePattern : Int -> Maybe String
-                                            generatedValuePattern valueIndex =
-                                                Just
-                                                    ("generated_"
-                                                        ++ (valueIndex |> String.fromInt)
-                                                    )
-                                        in
-                                        HaxeExpressionLambda
-                                            { parameter0 = generatedValuePattern 0
-                                            , parameter1Up =
-                                                generatedValuePattern 1
-                                                    :: (List.range 2 (valueCountAtLeast2 - 1)
-                                                            |> List.map generatedValuePattern
-                                                       )
-                                            , result =
-                                                HaxeExpressionCall
-                                                    { called = HaxeExpressionReference reference
-                                                    , arguments =
-                                                        generatedValueVariableReference 0
-                                                            :: generatedValueVariableReference 1
-                                                            :: (List.range 2 (valueCountAtLeast2 - 1)
-                                                                    |> List.map generatedValueVariableReference
-                                                               )
-                                                    }
-                                            }
-                                )
+                            Ok (HaxeExpressionReference reference)
 
                         -- not a variant
                         Nothing ->
@@ -4346,10 +4300,10 @@ expressionWithLocalDeclarations context letIn =
                         |> List.filterMap
                             (\declaration ->
                                 case declaration of
-                                    HaxeLetDestructuring _ ->
+                                    HaxeDestructuring _ ->
                                         Nothing
 
-                                    HaxeLetDeclarationValueOrFunction haxeLetValueOrFunction ->
+                                    HaxeLocalDeclarationValueOrFunction haxeLetValueOrFunction ->
                                         Just haxeLetValueOrFunction
                             )
 
@@ -4363,10 +4317,10 @@ expressionWithLocalDeclarations context letIn =
                         |> List.filterMap
                             (\declaration ->
                                 case declaration of
-                                    HaxeLetDeclarationValueOrFunction _ ->
+                                    HaxeLocalDeclarationValueOrFunction _ ->
                                         Nothing
 
-                                    HaxeLetDestructuring haxeLetDestructuring ->
+                                    HaxeDestructuring haxeLetDestructuring ->
                                         Just haxeLetDestructuring
                             )
 
@@ -4462,9 +4416,57 @@ includeDestructuringsIntoHaxeValueAndFunctionDeclarations :
     }
     -> HaxeExpression
 includeDestructuringsIntoHaxeValueAndFunctionDeclarations state =
+    includeDestructuringsIntoHaxeValueAndFunctionDeclarationsFrom []
+        { destructuringDeclarationsMostToLeastDependedUpon =
+            state.destructuringDeclarationsMostToLeastDependedUpon
+        , valueAndFunctionDeclarationsMostToLeastDependedUpon =
+            state.valueAndFunctionDeclarationsMostToLeastDependedUpon
+        }
+        |> List.foldl
+            (\valueOrFunctionDeclarationOrDestructuring soFar ->
+                case valueOrFunctionDeclarationOrDestructuring of
+                    HaxeDestructuring destructuring ->
+                        HaxeExpressionSwitch
+                            { matched = destructuring.expression
+                            , case0 =
+                                { pattern = destructuring.pattern
+                                , result = soFar
+                                }
+                            , case1Up = []
+                            }
+
+                    HaxeLocalDeclarationValueOrFunction localValueOrFunctionDeclaration ->
+                        HaxeExpressionWithLocalDeclaration
+                            { declaration = localValueOrFunctionDeclaration
+                            , result = soFar
+                            }
+            )
+            state.result
+
+
+includeDestructuringsIntoHaxeValueAndFunctionDeclarationsFrom :
+    List HaxeValueOrFunctionDeclarationOrDestructuring
+    ->
+        { destructuringDeclarationsMostToLeastDependedUpon :
+            List
+                { pattern : HaxePattern
+                , expression : HaxeExpression
+                }
+        , valueAndFunctionDeclarationsMostToLeastDependedUpon :
+            List
+                (Data.Graph.SCC
+                    { name : String
+                    , parameters : List (Maybe String)
+                    , result : HaxeExpression
+                    , type_ : Maybe HaxeType
+                    }
+                )
+        }
+    -> List HaxeValueOrFunctionDeclarationOrDestructuring
+includeDestructuringsIntoHaxeValueAndFunctionDeclarationsFrom valueOrFunctionOrDestructuringsSoFar state =
     case state.destructuringDeclarationsMostToLeastDependedUpon of
         [] ->
-            state.valueAndFunctionDeclarationsMostToLeastDependedUpon
+            (state.valueAndFunctionDeclarationsMostToLeastDependedUpon
                 |> List.concatMap
                     (\group ->
                         case group of
@@ -4474,97 +4476,81 @@ includeDestructuringsIntoHaxeValueAndFunctionDeclarations state =
                             Data.Graph.AcyclicSCC member ->
                                 [ member ]
                     )
-                |> List.foldr
-                    (\declaration soFar ->
-                        HaxeExpressionWithLocalDeclaration
-                            { declaration = declaration
-                            , result = soFar
-                            }
+                |> List.map
+                    (\declaration ->
+                        HaxeLocalDeclarationValueOrFunction declaration
                     )
-                    state.result
+                |> List.reverse
+            )
+                ++ valueOrFunctionOrDestructuringsSoFar
 
         mostDependedUponDestructuringDeclaration :: destructuringDeclarationsWithoutMostDependedUpon ->
             case state.valueAndFunctionDeclarationsMostToLeastDependedUpon of
                 [] ->
-                    -- apply all destructurings as one switch
-                    HaxeExpressionSwitch
-                        { matched = mostDependedUponDestructuringDeclaration.expression
-                        , case0 =
-                            { pattern = mostDependedUponDestructuringDeclaration.pattern
-                            , result = state.result
-                            }
-                        , case1Up = []
-                        }
+                    ((mostDependedUponDestructuringDeclaration
+                        :: destructuringDeclarationsWithoutMostDependedUpon
+                     )
+                        |> List.map HaxeDestructuring
+                        |> List.reverse
+                    )
+                        ++ valueOrFunctionOrDestructuringsSoFar
 
                 mostDependedUponGroup :: remainingWithoutGroup ->
-                    includeDestructuringsIntoHaxeValueAndFunctionDeclarations
-                        (-- TODO avoid duplicate haxeExpressionContainedLocalReferences
-                         let
-                            destructuringIntroducedVariables : FastSet.Set String
-                            destructuringIntroducedVariables =
-                                mostDependedUponDestructuringDeclaration.pattern
-                                    |> haxePatternIntroducedVariables
-                                    |> FastSet.fromList
+                    -- TODO avoid duplicate haxeExpressionContainedLocalReferences
+                    let
+                        destructuringIntroducedVariables : FastSet.Set String
+                        destructuringIntroducedVariables =
+                            mostDependedUponDestructuringDeclaration.pattern
+                                |> haxePatternIntroducedVariables
+                                |> FastSet.fromList
 
-                            groupLocalReferences : FastSet.Set String
-                            groupLocalReferences =
-                                case mostDependedUponGroup of
-                                    Data.Graph.CyclicSCC cycleMembers ->
-                                        cycleMembers
-                                            |> listMapToFastSetsAndUnify
-                                                (\declaration ->
-                                                    declaration.result
-                                                        |> haxeExpressionContainedLocalReferences
-                                                )
+                        groupLocalReferences : FastSet.Set String
+                        groupLocalReferences =
+                            case mostDependedUponGroup of
+                                Data.Graph.CyclicSCC cycleMembers ->
+                                    cycleMembers
+                                        |> listMapToFastSetsAndUnify
+                                            (\declaration ->
+                                                declaration.result
+                                                    |> haxeExpressionContainedLocalReferences
+                                            )
 
-                                    Data.Graph.AcyclicSCC member ->
-                                        member.result |> haxeExpressionContainedLocalReferences
-                         in
-                         if
-                            fastSetsIntersect
-                                destructuringIntroducedVariables
-                                groupLocalReferences
-                         then
+                                Data.Graph.AcyclicSCC member ->
+                                    member.result |> haxeExpressionContainedLocalReferences
+                    in
+                    if
+                        fastSetsIntersect
+                            destructuringIntroducedVariables
+                            groupLocalReferences
+                    then
+                        includeDestructuringsIntoHaxeValueAndFunctionDeclarationsFrom
+                            (HaxeDestructuring mostDependedUponDestructuringDeclaration
+                                :: valueOrFunctionOrDestructuringsSoFar
+                            )
                             { valueAndFunctionDeclarationsMostToLeastDependedUpon =
                                 mostDependedUponGroup :: remainingWithoutGroup
                             , destructuringDeclarationsMostToLeastDependedUpon =
                                 destructuringDeclarationsWithoutMostDependedUpon
-                            , result =
-                                HaxeExpressionSwitch
-                                    { matched = mostDependedUponDestructuringDeclaration.expression
-                                    , case0 =
-                                        { pattern = mostDependedUponDestructuringDeclaration.pattern
-                                        , result = state.result
-                                        }
-                                    , case1Up = []
-                                    }
                             }
 
-                         else
+                    else
+                        includeDestructuringsIntoHaxeValueAndFunctionDeclarationsFrom
+                            (case mostDependedUponGroup of
+                                Data.Graph.CyclicSCC cycleMembers ->
+                                    (cycleMembers
+                                        |> List.map HaxeLocalDeclarationValueOrFunction
+                                    )
+                                        ++ valueOrFunctionOrDestructuringsSoFar
+
+                                Data.Graph.AcyclicSCC member ->
+                                    HaxeLocalDeclarationValueOrFunction member
+                                        :: valueOrFunctionOrDestructuringsSoFar
+                            )
                             { valueAndFunctionDeclarationsMostToLeastDependedUpon =
                                 remainingWithoutGroup
                             , destructuringDeclarationsMostToLeastDependedUpon =
                                 mostDependedUponDestructuringDeclaration :: destructuringDeclarationsWithoutMostDependedUpon
-                            , result =
-                                case mostDependedUponGroup of
-                                    Data.Graph.CyclicSCC cycleMembers ->
-                                        cycleMembers
-                                            |> List.foldl
-                                                (\cycleMember soFarResult ->
-                                                    HaxeExpressionWithLocalDeclaration
-                                                        { declaration = cycleMember
-                                                        , result = soFarResult
-                                                        }
-                                                )
-                                                state.result
-
-                                    Data.Graph.AcyclicSCC member ->
-                                        HaxeExpressionWithLocalDeclaration
-                                            { declaration = member
-                                            , result = state.result
-                                            }
                             }
-                        )
 
 
 fastSetsIntersect : FastSet.Set comparable -> FastSet.Set comparable -> Bool
@@ -4845,12 +4831,6 @@ condenseExpressionCall call =
                                 , arguments = argument1 :: argument2Up
                                 }
 
-                ( Just "generated_0", HaxeExpressionCall variantCall ) ->
-                    HaxeExpressionCall
-                        { called = variantCall.called
-                        , arguments = call.argument0 :: call.argument1Up
-                        }
-
                 _ ->
                     HaxeExpressionCall
                         { called = HaxeExpressionLambda calledLambda
@@ -4962,13 +4942,13 @@ letDeclaration :
     , variablesFromWithinDeclarationInScope : FastSet.Set String
     }
     -> Elm.Syntax.Node.Node Elm.Syntax.Expression.LetDeclaration
-    -> Result String HaxeLetDeclaration
+    -> Result String HaxeValueOrFunctionDeclarationOrDestructuring
 letDeclaration context (Elm.Syntax.Node.Node _ syntaxLetDeclaration) =
     case syntaxLetDeclaration of
         Elm.Syntax.Expression.LetDestructuring destructuringPatternNode destructuringExpressionNode ->
             Result.map2
                 (\destructuringPattern destructuringExpression ->
-                    HaxeLetDestructuring
+                    HaxeDestructuring
                         { pattern = destructuringPattern.pattern
                         , expression = destructuringExpression
                         }
@@ -4985,7 +4965,7 @@ letDeclaration context (Elm.Syntax.Node.Node _ syntaxLetDeclaration) =
         Elm.Syntax.Expression.LetFunction letValueOrFunction ->
             Result.map
                 (\haxeLetDeclarationValueOrFunction ->
-                    HaxeLetDeclarationValueOrFunction
+                    HaxeLocalDeclarationValueOrFunction
                         haxeLetDeclarationValueOrFunction
                 )
                 (letValueOrFunction
