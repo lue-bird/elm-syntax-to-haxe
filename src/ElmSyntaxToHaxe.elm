@@ -5533,7 +5533,11 @@ printHaxeExpressionWithLocalDeclaration :
     }
     -> Print
 printHaxeExpressionWithLocalDeclaration haxeExpressionWithLocalDeclaration =
-    (haxeExpressionWithLocalDeclaration.declaration |> printHaxeValueOrFunctionDeclaration)
+    -- TODO if has generics, assume they originate from a module-level annotation
+    -- and use a plain value instead of a function()
+    (haxeExpressionWithLocalDeclaration.declaration
+        |> printHaxeValueOrFunctionDeclaration
+    )
         |> Print.followedBy Print.linebreak
         |> Print.followedBy Print.linebreakIndented
         |> Print.followedBy
