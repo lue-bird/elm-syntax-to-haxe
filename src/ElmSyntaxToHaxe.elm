@@ -1224,7 +1224,7 @@ printHaxeTypeRecord : FastDict.Dict String HaxeType -> Print
 printHaxeTypeRecord fields =
     Print.exactly "{"
         |> Print.followedBy
-            (Print.withIndentIncreasedBy 2
+            (Print.withIndentIncreasedBy 1
                 (fields
                     |> FastDict.toList
                     |> Print.listMapAndIntersperseAndFlatten
@@ -2443,15 +2443,12 @@ printHaxeExpressionRecord syntaxRecordFields =
     in
     Print.exactly "{"
         |> Print.followedBy
-            (Print.withIndentAtNextMultipleOf4
-                (Print.emptyOrLinebreakIndented fullLineSpread
-                    |> Print.followedBy
-                        (fieldsPrints
-                            |> Print.listIntersperseAndFlatten
-                                (Print.exactly ","
-                                    |> Print.followedBy
-                                        (Print.spaceOrLinebreakIndented fullLineSpread)
-                                )
+            (Print.withIndentIncreasedBy 1
+                (fieldsPrints
+                    |> Print.listIntersperseAndFlatten
+                        (Print.exactly ","
+                            |> Print.followedBy
+                                (Print.spaceOrLinebreakIndented fullLineSpread)
                         )
                 )
             )
@@ -5753,11 +5750,10 @@ printHaxeValueDeclaration haxeValueOrFunctionDeclaration =
                         in
                         Print.exactly ":"
                             |> Print.followedBy
-                                (Print.emptyOrLinebreakIndented typeLineSpread
-                                    |> Print.followedBy
-                                        (Print.withIndentAtNextMultipleOf4
-                                            typePrint
-                                        )
+                                (Print.withIndentAtNextMultipleOf4
+                                    (Print.emptyOrLinebreakIndented typeLineSpread
+                                        |> Print.followedBy typePrint
+                                    )
                                 )
                  )
                     |> Print.followedBy
@@ -5932,9 +5928,7 @@ printHaxeFunctionDeclaration haxeFunctionDeclaration =
                             |> Print.followedBy
                                 (Print.emptyOrLinebreakIndented typeLineSpread
                                     |> Print.followedBy
-                                        (Print.withIndentAtNextMultipleOf4
-                                            resultTypePrint
-                                        )
+                                        resultTypePrint
                                 )
                         )
                     )
