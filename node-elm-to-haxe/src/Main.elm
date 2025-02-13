@@ -181,7 +181,7 @@ runningInterface state =
             { path = "src/Elm.hx"
             , content =
                 transpiledDeclarationsAndErrors.declarations
-                    |> ElmSyntaxToHaxe.haxeDeclarationsToModuleString
+                    |> ElmSyntaxToHaxe.haxeDeclarationsToFileString
                     |> Bytes.Encode.string
                     |> Bytes.Encode.encode
             }

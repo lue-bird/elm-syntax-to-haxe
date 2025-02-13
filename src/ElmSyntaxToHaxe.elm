@@ -1,12 +1,12 @@
 module ElmSyntaxToHaxe exposing
-    ( modules, haxeDeclarationsToModuleString
+    ( modules, haxeDeclarationsToFileString
     , HaxeExpression(..), HaxePattern(..), HaxeType(..)
     )
 
 {-| Transpiling [`elm-syntax`](https://dark.elm.dmy.fr/packages/stil4m/elm-syntax/latest/)
 declarations to haxe.
 
-@docs modules, haxeDeclarationsToModuleString
+@docs modules, haxeDeclarationsToFileString
 @docs HaxeLetDeclaration, HaxeExpression, HaxePattern, HaxeType
 
 If you need more fine-grained helpers,
@@ -5592,7 +5592,7 @@ printHaxeExpressionSingleCase branch =
 an haxe module called `Elm` in the global namespace that exposes all members.
 Will also add some internal wrapper declarations.
 -}
-haxeDeclarationsToModuleString :
+haxeDeclarationsToFileString :
     { valuesAndFunctions :
         FastDict.Dict
             String
@@ -5614,7 +5614,7 @@ haxeDeclarationsToModuleString :
             }
     }
     -> String
-haxeDeclarationsToModuleString haxeDeclarations =
+haxeDeclarationsToFileString haxeDeclarations =
     let
         valueAndFunctionDeclarationsOrdered :
             List

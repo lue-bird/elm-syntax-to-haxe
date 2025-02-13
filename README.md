@@ -18,7 +18,7 @@ plus2 n =
             [ syntaxModule ]
                 |> ElmSyntaxToHaxe.modules
                 |> .declarations
-                |> ElmSyntaxToHaxe.haxeDeclarationsToModuleString
+                |> ElmSyntaxToHaxe.haxeDeclarationsToFileString
         )
 -->
 Ok """..some type declarations and imports..
