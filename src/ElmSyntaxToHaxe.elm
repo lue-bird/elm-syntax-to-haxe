@@ -2146,8 +2146,8 @@ referenceToCoreHaxe reference =
                 "toUpper" ->
                     Just { moduleOrigin = Nothing, name = "string_toUpper" }
 
-                "isHex" ->
-                    Just { moduleOrigin = Nothing, name = "char_isHex" }
+                "isHexDigit" ->
+                    Just { moduleOrigin = Nothing, name = "char_isHexDigit" }
 
                 _ ->
                     Nothing
@@ -6194,7 +6194,7 @@ haxeDefaultDeclarations =
 \t}
 
 \tstatic function string_all(isExpected:String->Bool, str:String):Bool {
-\t\treturn if (str == "") true else Lambda.forall(str.split(""), isExpected);
+\t\treturn if (str == "") true else Lambda.foreach(str.split(""), isExpected);
 \t}
 
 \tstatic function string_any(isOdd:String->Bool, str:String):Bool {
@@ -6249,7 +6249,7 @@ haxeDefaultDeclarations =
 \t\treturn char.charCodeAt(0) ?? 0;
 \t}
 
-\tstatic function char_isHex(char:String):Bool {
+\tstatic function char_isHexDigit(char:String):Bool {
 \t\treturn switch char {
 \t\t\tcase "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "a" | "A" | "b" | "B" | "c" | "C" | "d" | "D" | "e" | "E" | "f" | "F": true;
 \t\t\tcase _: false;
