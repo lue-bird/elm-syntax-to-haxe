@@ -3780,59 +3780,59 @@ expression context (Elm.Syntax.Node.Node _ syntaxExpression) =
                         (rightNode |> expression context)
 
         Elm.Syntax.Expression.FunctionOrValue qualification name ->
-            let
-                asVariableFromWithinDeclaration : Maybe String
-                asVariableFromWithinDeclaration =
-                    case qualification of
-                        _ :: _ ->
-                            Nothing
+            case context.variantLookup |> FastDict.get ( qualification, name ) of
+                Just variantInfo ->
+                    let
+                        reference : { moduleOrigin : Maybe String, name : String }
+                        reference =
+                            case { moduleOrigin = variantInfo.moduleOrigin, name = name } |> referenceToCoreHaxe of
+                                Just haxeReference ->
+                                    haxeReference
 
-                        [] ->
-                            let
-                                haxeName : String
-                                haxeName =
-                                    name |> lowercaseNameSanitizeForHaxe
-                            in
-                            if
-                                context.variablesFromWithinDeclarationInScope
-                                    |> FastSet.member haxeName
-                            then
-                                Just haxeName
-
-                            else
-                                Nothing
-            in
-            case asVariableFromWithinDeclaration of
-                Just variableFromWithinDeclaration ->
-                    Ok
-                        (HaxeExpressionReference
-                            { moduleOrigin = Nothing
-                            , name = variableFromWithinDeclaration
-                            }
-                        )
-
-                Nothing ->
-                    case context.variantLookup |> FastDict.get ( qualification, name ) of
-                        Just variantInfo ->
-                            let
-                                reference : { moduleOrigin : Maybe String, name : String }
-                                reference =
-                                    case { moduleOrigin = variantInfo.moduleOrigin, name = name } |> referenceToCoreHaxe of
-                                        Just haxeReference ->
-                                            haxeReference
-
-                                        Nothing ->
-                                            { moduleOrigin = Nothing
-                                            , name =
-                                                uppercaseReferenceToHaxeName
-                                                    { moduleOrigin = variantInfo.moduleOrigin
-                                                    , name = name
-                                                    }
+                                Nothing ->
+                                    { moduleOrigin = Nothing
+                                    , name =
+                                        uppercaseReferenceToHaxeName
+                                            { moduleOrigin = variantInfo.moduleOrigin
+                                            , name = name
                                             }
-                            in
-                            Ok (HaxeExpressionReference reference)
+                                    }
+                    in
+                    Ok (HaxeExpressionReference reference)
 
-                        -- not a variant
+                -- not a variant
+                Nothing ->
+                    let
+                        asVariableFromWithinDeclaration : Maybe String
+                        asVariableFromWithinDeclaration =
+                            case qualification of
+                                _ :: _ ->
+                                    Nothing
+
+                                [] ->
+                                    let
+                                        haxeName : String
+                                        haxeName =
+                                            name |> lowercaseNameSanitizeForHaxe
+                                    in
+                                    if
+                                        context.variablesFromWithinDeclarationInScope
+                                            |> FastSet.member haxeName
+                                    then
+                                        Just haxeName
+
+                                    else
+                                        Nothing
+                    in
+                    case asVariableFromWithinDeclaration of
+                        Just variableFromWithinDeclaration ->
+                            Ok
+                                (HaxeExpressionReference
+                                    { moduleOrigin = Nothing
+                                    , name = variableFromWithinDeclaration
+                                    }
+                                )
+
                         Nothing ->
                             case context.valueAndFunctionAndTypeAliasAndEnumTypeModuleOriginLookup |> FastDict.get ( qualification, name ) of
                                 Just moduleOrigin ->
@@ -5706,7 +5706,7 @@ class Elm {
                 (valueAndFunctionDeclarationsOrdered
                     |> Print.listMapAndIntersperseAndFlatten
                         (\haxeValueOrFunctionDeclaration ->
-                            Print.exactly "static "
+                            Print.exactly "static public "
                                 |> Print.followedBy
                                     (printHaxeValueOrFunctionDeclaration
                                         haxeValueOrFunctionDeclaration
