@@ -3022,6 +3022,7 @@ modules syntaxDeclarationsIncludingOverwrittenOnes =
                                     case declaration of
                                         Elm.Syntax.Declaration.FunctionDeclaration syntaxValueOrFunctionDeclaration ->
                                             let
+                                                implementation : Elm.Syntax.Expression.FunctionImplementation
                                                 implementation =
                                                     syntaxValueOrFunctionDeclaration.declaration |> Elm.Syntax.Node.value
                                             in
@@ -3324,7 +3325,11 @@ typeContainedVariables (Elm.Syntax.Node.Node _ syntaxType) =
             FastSet.empty
 
         Elm.Syntax.TypeAnnotation.GenericType variableName ->
-            variableName |> FastSet.singleton
+            if variableName |> String.startsWith "number" then
+                FastSet.empty
+
+            else
+                variableName |> FastSet.singleton
 
         Elm.Syntax.TypeAnnotation.Typed _ argumentNodes ->
             argumentNodes
