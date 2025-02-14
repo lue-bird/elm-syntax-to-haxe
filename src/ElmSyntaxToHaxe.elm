@@ -7,7 +7,7 @@ module ElmSyntaxToHaxe exposing
 declarations to haxe.
 
 @docs modules, haxeDeclarationsToFileString
-@docs HaxeLetDeclaration, HaxeExpression, HaxePattern, HaxeType
+@docs HaxeExpression, HaxePattern, HaxeType
 
 If you need more fine-grained helpers,
 [open an issue](https://github.com/lue-bird/elm-syntax-format/issues/new)
@@ -3048,7 +3048,19 @@ modules syntaxDeclarationsIncludingOverwrittenOnes =
                                                                         |> Elm.Syntax.Node.value
                                                                     )
 
-                                        _ ->
+                                        Elm.Syntax.Declaration.AliasDeclaration _ ->
+                                            Nothing
+
+                                        Elm.Syntax.Declaration.CustomTypeDeclaration _ ->
+                                            Nothing
+
+                                        Elm.Syntax.Declaration.PortDeclaration _ ->
+                                            Nothing
+
+                                        Elm.Syntax.Declaration.InfixDeclaration _ ->
+                                            Nothing
+
+                                        Elm.Syntax.Declaration.Destructuring _ _ ->
                                             Nothing
                                 )
                             |> FastSet.fromList
@@ -4804,21 +4816,6 @@ listMapToFastSetsAndUnify elementToSet list =
             FastSet.empty
 
 
-listMapToFastDictsAndUnify :
-    (listElement -> FastDict.Dict comparableKey value)
-    -> List listElement
-    -> FastDict.Dict comparableKey value
-listMapToFastDictsAndUnify elementToDict list =
-    list
-        |> List.foldl
-            (\element soFar ->
-                FastDict.union
-                    (element |> elementToDict)
-                    soFar
-            )
-            FastDict.empty
-
-
 listMapToFastDict :
     (listElement -> ( comparableKey, value ))
     -> List listElement
@@ -6527,31 +6524,6 @@ haxeDefaultDeclarations =
 \t\t}
 \t}
 """
-
-
-resultAndThen3 :
-    (a -> b -> c -> Result error d)
-    -> Result error a
-    -> Result error b
-    -> Result error c
-    -> Result error d
-resultAndThen3 abToResult aResult bResult cResult =
-    case aResult of
-        Err error ->
-            Err error
-
-        Ok a ->
-            case bResult of
-                Err error ->
-                    Err error
-
-                Ok b ->
-                    case cResult of
-                        Err error ->
-                            Err error
-
-                        Ok c ->
-                            abToResult a b c
 
 
 fastDictMapAndToList :
