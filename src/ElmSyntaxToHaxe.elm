@@ -6091,11 +6091,11 @@ haxeDefaultDeclarations =
 \t\t};
 \t}
 
-\tinline static function string_length(str:String) {
+\tinline static function string_length(str:String):Float {
 \t\treturn str.length;
 \t}
 
-\tinline static function string_isEmpty(str:String) {
+\tinline static function string_isEmpty(str:String):Bool {
 \t\treturn str == "";
 \t}
 
@@ -6287,6 +6287,10 @@ haxeDefaultDeclarations =
 \t\treturn char.charCodeAt(0) ?? 0;
 \t}
 
+\tstatic function char_fromCode(charCode:Float):String {
+\t\treturn String.fromCharCode(Std.int(charCode));
+\t}
+
 \tstatic function char_isHexDigit(char:String):Bool {
 \t\treturn switch char {
 \t\t\tcase "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "a" | "A" | "b" | "B" | "c" | "C" | "d" | "D" | "e" | "E" | "f" | "F": true;
@@ -6294,7 +6298,7 @@ haxeDefaultDeclarations =
 \t\t};
 \t}
 
-\tstatic function list_singleton<A>(onlyElement:A) {
+\tstatic function list_singleton<A>(onlyElement:A):List_List<A> {
 \t\treturn List_Cons(onlyElement, List_Empty);
 \t}
 
