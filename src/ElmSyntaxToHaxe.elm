@@ -6441,7 +6441,7 @@ haxeDefaultDeclarations =
 \t\treturn list_foldr((element, soFar) -> list_append(elementToList(element), soFar), List_Empty, list);
 \t}
 
-\tstatic function list_concat<A, B>(list:List_List<List_List<A>>):List_List<A> {
+\tstatic function list_concat<A>(list:List_List<List_List<A>>):List_List<A> {
 \t\treturn list_foldr((element, soFar) -> list_append(element, soFar), List_Empty, list);
 \t}
 
