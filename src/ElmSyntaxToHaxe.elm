@@ -6125,7 +6125,7 @@ haxeDefaultDeclarations =
 \t\twhile (true) {
 \t\t\tswitch remainingSegments {
 \t\t\t\tcase List_Empty:
-\t\t\t\t\tbreak;
+\t\t\t\t\treturn stringBuffer.toString();
 \t\t\t\tcase List_Cons(head, tail):
 \t\t\t\t\tstringBuffer.add(head);
 \t\t\t\t\tremainingSegments = tail;
@@ -6145,7 +6145,7 @@ haxeDefaultDeclarations =
 \t\t\t\twhile (true) {
 \t\t\t\t\tswitch remainingCharacters {
 \t\t\t\t\t\tcase List_Empty:
-\t\t\t\t\t\t\tbreak;
+\t\t\t\t\t\t\treturn stringBuffer.toString();
 \t\t\t\t\t\tcase List_Cons(head, tail):
 \t\t\t\t\t\t\tstringBuffer.add(inBetween);
 \t\t\t\t\t\t\tstringBuffer.add(head);
@@ -6348,17 +6348,17 @@ haxeDefaultDeclarations =
 
 \tstatic function list_drop<A>(countToSkip:Float, list:List_List<A>):List_List<A> {
 \t\tvar remainingCountToSkip = countToSkip;
-\t\tvar soFar = list;
+\t\tvar remainingList = list;
 \t\twhile (remainingCountToSkip >= 1) {
-\t\t\tswitch (soFar) {
+\t\t\tswitch (remainingList) {
 \t\t\t\tcase List_Empty:
-\t\t\t\t\tbreak;
+\t\t\t\t\treturn remainingList;
 \t\t\t\tcase List_Cons(_, tail):
-\t\t\t\t\tsoFar = tail;
+\t\t\t\t\tremainingList = tail;
 \t\t\t\t\tremainingCountToSkip--;
 \t\t\t}
 \t\t}
-\t\treturn soFar;
+\t\treturn remainingList;
 \t}
 
 \tstatic function list_take<A>(countToTake:Float, list:List_List<A>):List_List<A> {
@@ -6368,7 +6368,7 @@ haxeDefaultDeclarations =
 \t\twhile (remainingCountToTake >= 1) {
 \t\t\tswitch (remainingList) {
 \t\t\t\tcase List_Empty:
-\t\t\t\t\tbreak;
+\t\t\t\t\treturn arrayToList_List(takenElementsArraySoFar);
 \t\t\t\tcase List_Cons(head, tail):
 \t\t\t\t\ttakenElementsArraySoFar.push(head);
 \t\t\t\t\tremainingList = tail;
@@ -6391,10 +6391,10 @@ haxeDefaultDeclarations =
 \t}
 
 \tstatic function list_indexedMap<A, B>(indexedElementChange:Float->A->B, list:List_List<A>):List_List<B> {
-\t\treturn list_foldr((element, soFar) -> {
+\t\treturn list_reverse(list_foldl((element, soFar) -> {
 \t\t\tindex: soFar.index + 1,
 \t\t\tlist: List_Cons(indexedElementChange(soFar.index, element), soFar.list)
-\t\t}, {index: 0, list: List_Empty}, list).list;
+\t\t}, {index: 0, list: List_Empty}, list).list);
 \t}
 
 \tstatic function list_map2<A, B, C>(combine_ab:(A, B) -> C, aList:List_List<A>, bList:List_List<B>,):List_List<C> {
@@ -6404,11 +6404,11 @@ haxeDefaultDeclarations =
 \t\twhile (true) {
 \t\t\tswitch {a: remainingAList, b: remainingBList} {
 \t\t\t\tcase {a: List_Empty, b: List_Empty}:
-\t\t\t\t\tbreak;
+\t\t\t\t\treturn arrayToList_List(combinedArraySoFar);
 \t\t\t\tcase {a: List_Empty, b: List_Cons(_, _)}:
-\t\t\t\t\tbreak;
+\t\t\t\t\treturn arrayToList_List(combinedArraySoFar);
 \t\t\t\tcase {a: List_Cons(_, _), b: List_Empty}:
-\t\t\t\t\tbreak;
+\t\t\t\t\treturn arrayToList_List(combinedArraySoFar);
 \t\t\t\tcase {a: List_Cons(aHead, aTail), b: List_Cons(bHead, bTail)}:
 \t\t\t\t\tremainingAList = aTail;
 \t\t\t\t\tremainingBList = bTail;
@@ -6461,9 +6461,9 @@ haxeDefaultDeclarations =
 \t\tvar foldedSoFar = initialFolded;
 \t\tvar remainingList = list;
 \t\twhile (true) {
-\t\t\tswitch list {
+\t\t\tswitch remainingList {
 \t\t\t\tcase List_Empty:
-\t\t\t\t\tbreak;
+\t\t\t\t\treturn foldedSoFar;
 \t\t\t\tcase List_Cons(head, tail):
 \t\t\t\t\tfoldedSoFar = reduce(head, initialFolded);
 \t\t\t\t\tremainingList = tail;
@@ -6477,7 +6477,7 @@ haxeDefaultDeclarations =
 \t}
 
 \tstatic function list_reverse<A>(list:List_List<A>):List_List<A> {
-\t\treturn list_foldr(List_Cons, List_Empty, list);
+\t\treturn list_foldl(List_Cons, List_Empty, list);
 \t}
 
 \tstatic function list_range(start:Float, end:Float):List_List<Float> {
