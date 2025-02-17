@@ -6481,11 +6481,13 @@ haxeDefaultDeclarations =
 \t}
 
 \tstatic function list_range(start:Float, end:Float):List_List<Float> {
-\t\tvar soFar:List_List<Float> = List_Empty;
-\t\tfor (i in Std.int(start)...Std.int(end)) {
-\t\t\tsoFar = List_Cons(i, soFar);
+\t\tvar listSoFar:List_List<Float> = List_Empty;
+\t\tvar currentNumber = Std.int(end);
+\t\twhile currentNumber >= start {
+\t\t\tlistSoFar = List_Cons(i, listSoFar);
+\t\t\tcurrentNumber--;
 \t\t}
-\t\treturn soFar;
+\t\treturn listSoFar;
 \t}
 
 \tstatic function list_sortWith<A>(elementCompare:(A, A) -> Basics_Order, list:List_List<A>,):List_List<A> {
